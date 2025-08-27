@@ -100,11 +100,11 @@ flowchart TD
 ### Intuition Hawkes (mise à jour d'intensité)
 ```mermaid
 flowchart TD
-  M[μ (base)] --> L4[λ_{t+dt}]
-  L[λ_t] -->|décroissance e^{-β·dt}| L2[λ_t décay]
-  L2 --> L4
-  N[N_t événements] --> A[+ α · N_t]
-  A --> L4
+    LAMBDA_T["lambda_t"] --> DECAY["decay: exp(-beta * dt)"]
+    DECAY --> LNEXT["lambda_{t+dt}"]
+    MU["mu (base)"] --> LNEXT
+    N_EVENTS["N_t events"] --> ALPHA[" + alpha * N_t "]
+    ALPHA --> LNEXT
 ```
 
 ### Échelle du carnet (exemple)
