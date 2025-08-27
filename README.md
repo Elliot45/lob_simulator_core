@@ -32,14 +32,15 @@ matplotlib
 pillow    # pour exporter en GIF
 ```
 
-> Pour exporter en **MP4**, installe aussi `ffmpeg` (ex. `conda install -c conda-forge ffmpeg`).
+> Pour exporter en **MP4**, il faut `ffmpeg` (ex. `conda install -c conda-forge ffmpeg`).
 
 ## Quick Start
 
 ### 1. Simulation + trace CSV
 Génère un CSV avec L1–L10, mid, spread, etc.
 ```bash
-python run_simulation.py --seconds 5 --dt_ms 1 --out lob_trace.csv
+python run_simulation.py --model poisson --seconds 5 --dt_ms 1 --out lob_trace.csv
+python run_simulation.py --model hawkes  --seconds 5 --dt_ms 1 --out lob_trace_hawkes.csv
 ```
 
 ### 2. Animation enrichie (depuis CSV)
@@ -55,9 +56,8 @@ python animate_trace.py --csv lob_trace.csv --depth 10 --save lob_anim.gif
 ### 3. Animation **live**
 Anime directement la boucle de simulation (Poisson + Market + Cancel).
 ```bash
-python animate_live.py --seconds 8 --dt_ms 1 --depth 10
-# Ajuster les intensités :
-# --limit_bid 40 --limit_ask 40 --market_bid 10 --market_ask 10 --cancel_bid 30 --cancel_ask 30
+python animate_live.py --model poisson --seconds 8 --dt_ms 1 --depth 10
+python animate_live.py --model hawkes  --seconds 8 --dt_ms 1 --depth 10
 ```
 
 ## Demo
@@ -65,8 +65,6 @@ python animate_live.py --seconds 8 --dt_ms 1 --depth 10
 > Exemple de rendu (généré avec `animate_trace.py`) :
 
 ![LOB Animation](lob_anim.gif)
-
-*(Animation générée à partir du carnet simulé avec Poisson+Market+Cancel)*
 
 ## Paramètres utiles
 - `--limit_*`, `--market_*`, `--cancel_*` : intensités (événements/seconde) par côté
@@ -84,6 +82,65 @@ assert (df["best_bid"] <= df["best_ask"]).all()
 assert (abs(df["mid"] - (df["best_bid"] + df["best_ask"]) / 2) < 1e-9).all()
 print("OK — invariants de base vérifiés")
 ```
+
+---
+
+## Microstructure 101 (schémas) & paramètres
+
+### Schéma de flux (du modèle au carnet)
+```mermaid
+graph LR
+  A[Modèles d'arrivée<br/>(Poisson / Hawkes)] --> B[Sampling par pas dt]
+  B --> C{Type d'événement}
+  C -->|limit| D[choose_limit_price(side, tick, best_bid, best_ask)]
+  C -->|market| E[Exécution contre L1 opposé]
+  C -->|cancel| F[choose_cancel_price(side, lob)]
+  D --> G[LOB engine]
+  E --> G
+  F --> G
+  G --> H[Snapshot L1–L10]
+  H --> I[Logger CSV]
+  H --> J[Animation Live / CSV]
+```
+
+### Intuition Hawkes (mise à jour d'intensité)
+```mermaid
+flowchart TD
+  M[μ (base)] --> L4[λ_{t+dt}]
+  L[λ_t] -->|décroissance e^{-β·dt}| L2[λ_t décay]
+  L2 --> L4
+  N[N_t événements] --> A[+ α · N_t]
+  A --> L4
+```
+
+### Échelle du carnet (exemple)
+```
+ASK_VOL     PRICE     BID_VOL
+  320      100.04        180
+  450      100.03        240
+  600      100.02   ←  best ask
+----------------  SPREAD  ----------------
+  290      100.01   →  best bid
+  520      100.00        410
+```
+
+### Paramètres & effets
+
+**Généraux**
+- `tick_size` : taille de pas de prix (ex: 0.01). Plus petit ⇒ carnet plus fin.
+- `depth_levels` : profondeur agrégée (L1–Lk) retournée par `snapshot`.
+
+**Poisson (constantes)**
+- `limit_*_lambda` : arrivées de limites (év/s). ↑ ⇒ carnet s'épaissit, spread se resserre.
+- `market_*_lambda` : arrivées au marché. ↑ ⇒ top-of-book se vide, spread respire/monte.
+- `cancel_*_lambda` : annulations. ↑ ⇒ carnet plus “nerveux”, moins de profondeur.
+
+**Hawkes (auto-excitation)**
+- `mu[key]` : intensité de base (év/s) pour `key ∈ {limit_bid, ..., cancel_ask}`.
+- `alpha[key]` : saut d’intensité par événement (contagion). ↑ ⇒ rafales.
+- `beta[key]` : vitesse de décroissance (1/s). ↑ ⇒ mémoire plus courte.
+
+> Rappel discret : `λ_{t+dt} = μ + (λ_t - μ)·exp(-β·dt) + α·N_t` avec `N_t ~ Poisson(λ_t·dt)`.
 
 ## Roadmap (extrait)
 - Environnement Gym: **latency-aware** (file d’attente ordres, slippage dynamique)

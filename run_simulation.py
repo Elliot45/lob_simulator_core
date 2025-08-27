@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 
 from lob_simulator import LOBConfig, LOBSimulator
-from order_flow_models import PoissonLimitMarketCancel, OrderEvent
+from order_flow_models import PoissonLimitMarketCancel, OrderEvent, HawkesOrderFlow
 
 
 def snapshot_levels(lob: LOBSimulator, depth: int = 10):
@@ -36,12 +36,19 @@ def apply_event(lob: LOBSimulator, ev: OrderEvent, counters: dict):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", choices=["poisson","hawkes"], default="poisson")
     ap.add_argument("--seconds", type=float, default=2.0)
     ap.add_argument("--dt_ms", type=float, default=1.0)
     ap.add_argument("--tick", type=float, default=0.01)
     ap.add_argument("--depth", type=int, default=10)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", type=str, default="lob_trace.csv")
+    ap.add_argument("--limit_bid",  type=float, default=30.0)
+    ap.add_argument("--limit_ask",  type=float, default=30.0)
+    ap.add_argument("--market_bid", type=float, default=6.0)
+    ap.add_argument("--market_ask", type=float, default=6.0)
+    ap.add_argument("--cancel_bid", type=float, default=24.0)
+    ap.add_argument("--cancel_ask", type=float, default=24.0)
     args = ap.parse_args()
 
     np.random.seed(args.seed)
@@ -54,12 +61,35 @@ def main():
         lob.add_limit_order("bid", mid0 - args.tick * (i + 1), 400 + 80 * i)
         lob.add_limit_order("ask", mid0 + args.tick * (i + 1), 400 + 80 * i)
 
-    model = PoissonLimitMarketCancel(
-        limit_bid_lambda=30.0, limit_ask_lambda=30.0, 
-        market_bid_lambda=6.0, market_ask_lambda=6.0,
-        cancel_bid_lambda=24.0, cancel_ask_lambda=24.0,
-        tick_size=0.01
-    )
+    if args.model == "poisson":
+        model = PoissonLimitMarketCancel(
+            limit_bid_lambda=30.0, limit_ask_lambda=30.0,
+            market_bid_lambda=6.0, market_ask_lambda=6.0,
+            cancel_bid_lambda=24.0, cancel_ask_lambda=24.0,
+            tick_size=args.tick,
+        )
+    else:
+        model = HawkesOrderFlow(
+            tick_size=args.tick,
+            mu={
+                "limit_bid": args.limit_bid,
+                "limit_ask": args.limit_ask,
+                "market_bid": args.market_bid,
+                "market_ask": args.market_ask,
+                "cancel_bid": args.cancel_bid,
+                "cancel_ask": args.cancel_ask,
+            },
+            alpha={
+                "limit_bid": 2.0, "limit_ask": 2.0,   # excitation modérée pour les limit orders
+                "market_bid": 4.0, "market_ask": 4.0, # excitation plus forte → rafales de market trades
+                "cancel_bid": 1.5, "cancel_ask": 1.5, # excitation faible pour les cancels
+            },
+            beta={
+                "limit_bid": 5.0, "limit_ask": 5.0,   # mémoire ~200 ms
+                "market_bid": 8.0, "market_ask": 8.0, # mémoire courte ~125 ms
+                "cancel_bid": 6.0, "cancel_ask": 6.0, # intermédiaire
+            },
+        )
 
     T = float(args.seconds)
     dt = args.dt_ms / 1000.0
