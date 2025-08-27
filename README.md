@@ -89,18 +89,12 @@ print("OK — invariants de base vérifiés")
 
 ### Schéma de flux (du modèle au carnet)
 ```mermaid
-graph LR
-  A[Modèles d'arrivée<br/>(Poisson / Hawkes)] --> B[Sampling par pas dt]
-  B --> C{Type d'événement}
-  C -->|limit| D[choose_limit_price(side, tick, best_bid, best_ask)]
-  C -->|market| E[Exécution contre L1 opposé]
-  C -->|cancel| F[choose_cancel_price(side, lob)]
-  D --> G[LOB engine]
-  E --> G
-  F --> G
-  G --> H[Snapshot L1–L10]
-  H --> I[Logger CSV]
-  H --> J[Animation Live / CSV]
+flowchart TD
+    LAMBDA_T["lambda_t"] --> DECAY["decay: exp(-beta * dt)"]
+    DECAY --> LNEXT["lambda_{t+dt}"]
+    MU["mu (base)"] --> LNEXT
+    N_EVENTS["N_t events"] --> ALPHA["+ alpha * N_t"]
+    ALPHA --> LNEXT
 ```
 
 ### Intuition Hawkes (mise à jour d'intensité)
