@@ -64,7 +64,7 @@ python animate_live.py --model hawkes  --seconds 8 --dt_ms 1 --depth 10
 
 > Exemple de rendu (généré avec `animate_trace.py`) :
 
-![LOB Animation](lob_anim.gif)
+![LOB Animation](lob_simulator_core/lob_anim.gif)
 
 ## Paramètres utiles
 - `--limit_*`, `--market_*`, `--cancel_*` : intensités (événements/seconde) par côté
